@@ -1,15 +1,19 @@
 import FontAwesome from '@expo/vector-icons/FontAwesome';
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
+import {  DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect, Suspense } from 'react';
 import 'react-native-reanimated';
 import { SQLiteProvider } from 'expo-sqlite';
+import { Provider as PaperProvider } from 'react-native-paper';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { useColorScheme } from '@/components/useColorScheme';
 import { databaseIni } from '@/database/databaseIni';
 import { Loading } from '@/components/loading';
+import { DarkTheme, LightTheme} from '@/constants/Thema';
+
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -47,9 +51,13 @@ export default function RootLayout() {
 
   return(
     <Suspense fallback={<Loading />}>
-      <SQLiteProvider databaseName='alarmes.db' onInit={databaseIni} useSuspense>
-        <RootLayoutNav />
-      </SQLiteProvider>
+      <PaperProvider>
+        <GestureHandlerRootView> 
+          <SQLiteProvider databaseName='alarmes.db' onInit={databaseIni} useSuspense>
+            <RootLayoutNav />
+          </SQLiteProvider>
+        </GestureHandlerRootView>
+      </PaperProvider>
     </Suspense>
   )
 }
@@ -59,7 +67,7 @@ function RootLayoutNav() {
 
   return (
     
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : LightTheme}>
         <Stack>
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           {/* <Stack.Screen name="modal" options={{ presentation: 'modal' }} /> */}
