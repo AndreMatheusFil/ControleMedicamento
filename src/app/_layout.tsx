@@ -11,8 +11,9 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { useColorScheme } from '@/components/useColorScheme';
 import { databaseIni } from '@/database/databaseIni';
-import { Loading } from '@/components/loading';
+import { Loading } from '@/components/Loading';
 import { DarkTheme, LightTheme} from '@/constants/Thema';
+import { Platform } from 'react-native';
 
 
 export {
@@ -53,9 +54,13 @@ export default function RootLayout() {
     <Suspense fallback={<Loading />}>
       <PaperProvider>
         <GestureHandlerRootView> 
-          <SQLiteProvider databaseName='alarmes.db' onInit={databaseIni} useSuspense>
+          {Platform.OS === 'web' ? (
             <RootLayoutNav />
-          </SQLiteProvider>
+          ) : (
+            <SQLiteProvider databaseName='alarmes.db' onInit={databaseIni} useSuspense>
+              <RootLayoutNav />
+            </SQLiteProvider>
+          )}
         </GestureHandlerRootView>
       </PaperProvider>
     </Suspense>

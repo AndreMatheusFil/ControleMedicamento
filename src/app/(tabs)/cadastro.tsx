@@ -16,7 +16,7 @@ import {
 
 import { TextInput, Checkbox } from '@/components/Themed';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import { useSQLiteContext } from 'expo-sqlite';
+import { useSQLiteContextSafe } from '@/hooks/useSQLiteContextSafe';
 
 type Alarme = {
   id: string;
@@ -43,7 +43,7 @@ export default function CadastroScreen() {
   const [mostrarModal, setMostrarModal] = useState(false);
   
   const [Alarmes, setAlarmes] = useState<Alarme[]>([]);
-  const db = useSQLiteContext();
+  const db = useSQLiteContextSafe();
 
   const [id, setId] = useState<string | null>();
   const [remedio, setRemedio] = useState<string>('');
@@ -134,7 +134,7 @@ export default function CadastroScreen() {
             remedio, duas_vezes, uma_vez, periodico, periodo, data_inicio, hora_inicio, 
             data_fim, segunda, terca, quarta, quinta, sexta, sabado, domingo,
             regra_especial, observacao
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           valores
         );
         Alert.alert('Alarme cadastrado com sucesso!');
