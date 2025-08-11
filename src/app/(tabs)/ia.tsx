@@ -7,25 +7,35 @@ import {
   ScrollView,
   Platform,
   ActivityIndicator,
+  Modal,
+  TextInput,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { createWorker } from 'tesseract.js';
 
 import { Text, View } from '@/components/Themed';
 import { useSQLiteContextSafe } from '@/hooks/useSQLiteContextSafe';
+import AdvancedOCR from '@/components/AdvancedOCR';
 
 type ExtractedMedication = {
   name: string;
   dosage?: string;
   frequency?: string;
   duration?: string;
+  originalText?: string;
+};
+
+type OCRResult = {
+  text: string;
+  confidence: number;
+  provider: string;
+  processingTime: number;
 };
 
 export default function IAScreen() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [extractedText, setExtractedText] = useState<string>('');
   const [medications, setMedications] = useState<ExtractedMedication[]>([]);
-  const [isProcessing, setIsProcessing] = useState(false);
+  const [ocrResults, setOcrResults] = useState<OCRResult[]>([]);
   const db = useSQLiteContextSafe();
 
   const pickImage = async () => {
@@ -48,6 +58,7 @@ export default function IAScreen() {
         setSelectedImage(result.assets[0].uri);
         setExtractedText('');
         setMedications([]);
+        setOcrResults([]);
       }
     } catch (error) {
       Alert.alert('Erro', 'Erro ao selecionar imagem');
@@ -74,6 +85,7 @@ export default function IAScreen() {
         setSelectedImage(result.assets[0].uri);
         setExtractedText('');
         setMedications([]);
+        setOcrResults([]);
       }
     } catch (error) {
       Alert.alert('Erro', 'Erro ao tirar foto');
@@ -81,127 +93,131 @@ export default function IAScreen() {
     }
   };
 
-  const processImage = async () => {
-    if (!selectedImage) {
-      Alert.alert('Erro', 'Selecione uma imagem primeiro');
-      return;
-    }
-
-    setIsProcessing(true);
+  // Handlers para o componente AdvancedOCR
+  const handleOcrResults = (results: OCRResult[], extractedMeds: ExtractedMedication[]) => {
+    console.log('📱 Tela principal recebeu resultados:', results);
+    console.log('💊 Medicamentos extraídos:', extractedMeds);
     
-    try {
-      const worker = await createWorker('por', 1, {
-        logger: m => console.log(m)
-      });
-      
-      const { data: { text } } = await worker.recognize(selectedImage);
-      await worker.terminate();
-      
-      setExtractedText(text);
-      const extractedMeds = extractMedicationsFromText(text);
-      setMedications(extractedMeds);
-      
-    } catch (error) {
-      Alert.alert('Erro', 'Erro ao processar imagem');
-      console.error('OCR Error:', error);
-    } finally {
-      setIsProcessing(false);
+    setOcrResults(results);
+    setMedications(extractedMeds);
+    
+    if (results.length > 0) {
+      const bestResult = results.reduce((best, current) => 
+        current.confidence > best.confidence ? current : best
+      );
+      setExtractedText(bestResult.text);
+    }
+    
+    // Se não há medicamentos extraídos automaticamente, mostrar mensagem
+    if (extractedMeds.length === 0) {
+      Alert.alert(
+        'Nenhum Medicamento Encontrado',
+        'Não foi possível extrair medicamentos automaticamente. Tente editar o texto ou adicionar manualmente.',
+        [{ text: 'OK' }]
+      );
     }
   };
 
-  const extractMedicationsFromText = (text: string): ExtractedMedication[] => {
-    const lines = text.split('\n').filter(line => line.trim().length > 0);
-    const medications: ExtractedMedication[] = [];
-    
-    const medicationKeywords = [
-      'mg', 'ml', 'comprimido', 'cápsula', 'gotas', 'ampola',
-      'vezes', 'dia', 'manhã', 'tarde', 'noite', 'horas',
-      'tomar', 'usar', 'aplicar'
-    ];
-    
-    for (const line of lines) {
-      const lowerLine = line.toLowerCase();
-      
-      if (medicationKeywords.some(keyword => lowerLine.includes(keyword))) {
-        const words = line.trim().split(' ');
-        let medicationName = '';
-        
-        for (const word of words) {
-          if (!/\d/.test(word) && word.length > 2) {
-            medicationName += word + ' ';
-          } else {
-            break;
-          }
-        }
-        
-        if (medicationName.trim()) {
-          const dosageMatch = line.match(/(\d+(?:\.\d+)?)\s*(mg|ml|g|mcg)/i);
-          const dosage = dosageMatch ? `${dosageMatch[1]}${dosageMatch[2]}` : undefined;
-          
-          const frequencyMatch = line.match(/(\d+)\s*(?:vezes?|x)\s*(?:ao\s*)?dia|de\s*(\d+)\s*em\s*(\d+)\s*horas?/i);
-          let frequency = undefined;
-          if (frequencyMatch) {
-            if (frequencyMatch[1]) {
-              frequency = `${frequencyMatch[1]} vezes ao dia`;
-            } else if (frequencyMatch[2] && frequencyMatch[3]) {
-              frequency = `De ${frequencyMatch[2]} em ${frequencyMatch[3]} horas`;
-            }
-          }
-          
-          medications.push({
-            name: medicationName.trim(),
-            dosage,
-            frequency,
-            duration: undefined
-          });
-        }
-      }
-    }
-    
-    return medications;
+  const handleOcrError = (error: string) => {
+    Alert.alert('Erro OCR', error);
   };
 
   const registerMedication = async (medication: ExtractedMedication) => {
     try {
       const hoje = new Date();
       const fimTratamento = new Date();
-      fimTratamento.setDate(hoje.getDate() + 30);
+      
+      if (medication.duration) {
+        const durationLower = medication.duration.toLowerCase();
+        if (durationLower.includes('dias')) {
+          const days = parseInt(durationLower.match(/(\d+)/)?.[1] || '30');
+          fimTratamento.setDate(hoje.getDate() + days);
+        } else if (durationLower.includes('semanas')) {
+          const weeks = parseInt(durationLower.match(/(\d+)/)?.[1] || '4');
+          fimTratamento.setDate(hoje.getDate() + (weeks * 7));
+        } else if (durationLower.includes('meses')) {
+          const months = parseInt(durationLower.match(/(\d+)/)?.[1] || '1');
+          fimTratamento.setMonth(hoje.getMonth() + months);
+        } else if (durationLower.includes('contínuo')) {
+          fimTratamento.setFullYear(hoje.getFullYear() + 1);
+        }
+      } else {
+        fimTratamento.setDate(hoje.getDate() + 30);
+      }
       
       let umaVez = false;
       let duasVezes = false;
       let periodico = false;
       let periodo = '08:00';
+      let horaInicio = '08:00';
       
       if (medication.frequency) {
         const freq = medication.frequency.toLowerCase();
-        if (freq.includes('1') || freq.includes('uma')) {
+        
+        if (freq.includes('1 vez') || freq.includes('uma vez')) {
           umaVez = true;
-        } else if (freq.includes('2') || freq.includes('duas')) {
+        } else if (freq.includes('2 vezes') || freq.includes('duas vezes')) {
           duasVezes = true;
-        } else {
+        } else if (freq.includes('3 vezes') || freq.includes('três vezes')) {
+          periodico = true;
+          periodo = '08:00';
+        } else if (freq.includes('4 vezes') || freq.includes('quatro vezes')) {
+          periodico = true;
+          periodo = '06:00';
+        } else if (freq.includes('cada') || freq.includes('de') && freq.includes('em')) {
           periodico = true;
           const horasMatch = freq.match(/(\d+)\s*horas?/);
           if (horasMatch) {
             const horas = parseInt(horasMatch[1]);
             periodo = `${horas.toString().padStart(2, '0')}:00`;
           }
+        } else if (freq.includes('manhã')) {
+          umaVez = true;
+          horaInicio = '08:00';
+        } else if (freq.includes('tarde')) {
+          umaVez = true;
+          horaInicio = '14:00';
+        } else if (freq.includes('noite')) {
+          umaVez = true;
+          horaInicio = '20:00';
+        } else if (freq.includes('jejum') || freq.includes('antes')) {
+          umaVez = true;
+          horaInicio = '07:00';
+        } else {
+          umaVez = true;
         }
       } else {
         umaVez = true;
       }
       
+      let nomeCompleto = medication.name;
+      if (medication.dosage) {
+        nomeCompleto += ` ${medication.dosage}`;
+      }
+      
+      let observacao = 'Extraído da receita';
+      if (medication.frequency) {
+        observacao += ` - Frequência: ${medication.frequency}`;
+      }
+      if (medication.duration) {
+        observacao += ` - Duração: ${medication.duration}`;
+      }
+      if (medication.originalText) {
+        observacao += ` - Original: ${medication.originalText}`;
+      }
+      
       const valores = [
-        `${medication.name}${medication.dosage ? ` ${medication.dosage}` : ''}`,
+        nomeCompleto,
         duasVezes ? 1 : 0,
         umaVez ? 1 : 0,
         periodico ? 1 : 0,
         periodo,
         hoje.toISOString().split('T')[0],
-        '08:00',
+        horaInicio,
         fimTratamento.toISOString().split('T')[0],
         1, 1, 1, 1, 1, 1, 1,
         0,
-        medication.frequency || 'Extraído da receita'
+        observacao
       ];
       
       await db.runAsync(
@@ -242,17 +258,12 @@ export default function IAScreen() {
         <View style={styles.imageContainer}>
           <Image source={{ uri: selectedImage }} style={styles.image} />
           
-          <TouchableOpacity 
-            style={[styles.processButton, isProcessing && styles.disabledButton]} 
-            onPress={processImage}
-            disabled={isProcessing}
-          >
-            {isProcessing ? (
-              <ActivityIndicator color="white" />
-            ) : (
-              <Text style={styles.buttonText}>🔍 Processar Receita</Text>
-            )}
-          </TouchableOpacity>
+          <AdvancedOCR
+            imageUri={selectedImage}
+            onResults={handleOcrResults}
+            onError={handleOcrError}
+            onRegisterMedication={registerMedication}
+          />
         </View>
       )}
       
@@ -263,25 +274,10 @@ export default function IAScreen() {
         </View>
       )}
       
-      {medications.length > 0 && (
-        <View style={styles.medicationsContainer}>
-          <Text style={styles.sectionTitle}>Medicamentos Encontrados:</Text>
-          {medications.map((med, index) => (
-            <View key={index} style={styles.medicationCard}>
-              <Text style={styles.medicationName}>{med.name}</Text>
-              {med.dosage && <Text style={styles.medicationDetail}>Dosagem: {med.dosage}</Text>}
-              {med.frequency && <Text style={styles.medicationDetail}>Frequência: {med.frequency}</Text>}
-              
-              <TouchableOpacity 
-                style={styles.registerButton}
-                onPress={() => registerMedication(med)}
-              >
-                <Text style={styles.registerButtonText}>✅ Cadastrar</Text>
-              </TouchableOpacity>
-            </View>
-          ))}
-        </View>
-      )}
+      {/* Os medicamentos agora são exibidos pelo componente AdvancedOCR */}
+      {/* Esta seção foi removida para evitar duplicação */}
+      
+
       
       <View style={styles.bottomPadding} />
     </ScrollView>
@@ -334,17 +330,7 @@ const styles = StyleSheet.create({
     marginBottom: 15,
     resizeMode: 'contain',
   },
-  processButton: {
-    backgroundColor: '#34C759',
-    paddingHorizontal: 30,
-    paddingVertical: 15,
-    borderRadius: 10,
-    minWidth: 150,
-    alignItems: 'center',
-  },
-  disabledButton: {
-    backgroundColor: '#999',
-  },
+
   textContainer: {
     backgroundColor: '#f5f5f5',
     padding: 15,
@@ -403,6 +389,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 16,
   },
+
   bottomPadding: {
     height: 50,
   },
