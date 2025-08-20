@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { View, Text }from '@/components/Themed';
 import { FlatList, StyleSheet } from 'react-native'
-import { useSQLiteContext } from 'expo-sqlite';
+import { useSQLiteContextSafe } from '@/hooks/useSQLiteContextSafe';
 
 type Alarme = {
   id: string;
@@ -13,7 +13,7 @@ type Alarme = {
 
 export default function TabPrincipal() {
   const [proximosAlarmes, setProximosAlarmes] = useState<Alarme[]>([]);
-  const db = useSQLiteContext();
+  const db = useSQLiteContextSafe();
 
   async function buscarProximosAlarmes() {
     try {
