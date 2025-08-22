@@ -29,6 +29,16 @@ export async function databaseIni(database:SQLiteDatabase) {
                 observacao TEXT
             );
         `)
+        await database.execAsync(`
+            CREATE TABLE IF NOT EXISTS horarios (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              id_alarme INTEGER,
+              data TEXT,
+              hora TEXT,
+              notificado BOOLEAN DEFAULT 0,
+              FOREIGN KEY (id_alarme) REFERENCES alarmes(id)
+            )
+          `);
         await seed(database)
     }
 }

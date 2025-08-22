@@ -11,7 +11,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { useColorScheme } from '@/components/useColorScheme';
 import { databaseIni } from '@/database/databaseIni';
-import { Loading } from '@/components/Loading';
+import { Loading } from '@/components/loading';
 import { DarkTheme, LightTheme} from '@/constants/Thema';
 import { Platform } from 'react-native';
 
