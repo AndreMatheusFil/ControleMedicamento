@@ -1,4 +1,5 @@
-import 'package:controlemedicamento/helpers/horarios.dart';
+import 'package:controlemedicamento/helpers/horarios_universal.dart';
+import 'package:controlemedicamento/helpers/horarios_web.dart' as web;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'cadastro_horarios_page.dart';
@@ -13,9 +14,9 @@ class HomePageCadastroState extends StatefulWidget{
 
 class _HomePageCadastroState extends State<HomePageCadastroState>{
 
-  HorariosHelper helper = HorariosHelper();
+  HorariosUniversalHelper helper = HorariosUniversalHelper();
 
-  List<Horarios> horarios = [];
+  List<web.Horarios> horarios = [];
   Map<String, dynamic> _lastRemoved = {};
   int _lastRemovedPos = 0;
 
@@ -45,10 +46,8 @@ class _HomePageCadastroState extends State<HomePageCadastroState>{
   @override
   Widget build(BuildContext context){
     return Scaffold( 
-      bottomNavigationBar: SizedBox(height: 10.0),
-      
       appBar: AppBar(
-        title: Text("Cadastro de Horários"),
+        title: Text("Medicamentos"),
         backgroundColor: Colors.blue,
         titleTextStyle: TextStyle(
           fontSize: 25.0,
@@ -148,7 +147,7 @@ class _HomePageCadastroState extends State<HomePageCadastroState>{
               label: "Desfazer",
               onPressed: (){
                 setState(() {
-                  horarios.insert(_lastRemovedPos, Horarios.fromMap(_lastRemoved['item'].toMap()));
+                  horarios.insert(_lastRemovedPos, web.Horarios.fromMap(_lastRemoved['item'].toMap()));
                   helper.saveHorario(horarios[_lastRemovedPos]);
                 });
               },
@@ -228,7 +227,7 @@ class _HomePageCadastroState extends State<HomePageCadastroState>{
       )
     );
   }
-  void _showCadastroHorarioPage({Horarios? horario}) async {
+  void _showCadastroHorarioPage({web.Horarios? horario}) async {
     final recHorario = await Navigator.push(
       context,
       MaterialPageRoute(
@@ -247,7 +246,7 @@ class _HomePageCadastroState extends State<HomePageCadastroState>{
   void _getAllHorarios() {
     helper.getAllHorarios().then((list) {
       setState(() {
-        horarios = List<Horarios>.from(list);
+        horarios = List<web.Horarios>.from(list);
       }); 
     });
   }

@@ -1,9 +1,10 @@
-import 'package:controlemedicamento/helpers/horarios.dart';
+import 'package:controlemedicamento/helpers/horarios_universal.dart';
+import 'package:controlemedicamento/helpers/horarios_web.dart' as web;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 class CadastroHorarioPage extends StatefulWidget {
-  final Horarios? horarios;
+  final web.Horarios? horarios;
 
   const CadastroHorarioPage({super.key, this.horarios});
 
@@ -13,7 +14,7 @@ class CadastroHorarioPage extends StatefulWidget {
 }
 
 class _CadastroHorarioPageState extends State<CadastroHorarioPage> {
-  late Horarios _editedHorario; 
+  late web.Horarios _editedHorario; 
   final _nomeController = TextEditingController();
   final _dataInicioController = TextEditingController();
   final _diasFimController = TextEditingController();
@@ -25,7 +26,7 @@ class _CadastroHorarioPageState extends State<CadastroHorarioPage> {
   void initState() {
     super.initState();
     if (widget.horarios == null) {
-      _editedHorario = Horarios();
+      _editedHorario = web.Horarios();
       _editedHorario.segunda = 1;
       _editedHorario.terca = 1;
       _editedHorario.quarta = 1;
@@ -34,7 +35,7 @@ class _CadastroHorarioPageState extends State<CadastroHorarioPage> {
       _editedHorario.sabado = 1;
       _editedHorario.domingo = 1;
     } else {
-      _editedHorario = Horarios.fromMap(widget.horarios!.toMap());
+      _editedHorario = web.Horarios.fromMap(widget.horarios!.toMap());
       _nomeController.text = _editedHorario.nome ?? "";
       if (_editedHorario.dataInicio != null) {
         String rawDate = _editedHorario.dataInicio ?? "";
@@ -56,7 +57,7 @@ class _CadastroHorarioPageState extends State<CadastroHorarioPage> {
       _minutoInicioController.text = _editedHorario.minutoInicio?.toString() ?? "";
       _frequenciaController.text = _editedHorario.frequencia?.toString() ?? "";
       _observacoesController.text = _editedHorario.observacoes ?? "";
-      _editedHorario = Horarios.fromMap(widget.horarios!.toMap());
+      _editedHorario = web.Horarios.fromMap(widget.horarios!.toMap());
     }
   }
   
