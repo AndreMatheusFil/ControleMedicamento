@@ -44,13 +44,9 @@ dependencies:
   google_mlkit_text_recognition: ^0.10.0
   image_picker: ^1.0.4
   camera: ^0.10.5+5
-  tesseract_ocr: ^0.4.0
   
-  # Processamento de texto e IA
+  # Para OCR web
   http: ^1.1.0
-  json_annotation: ^4.8.1
-  googleapis: ^11.4.0
-  googleapis_auth: ^1.4.1
   
   # Permissões
   permission_handler: ^11.0.1
