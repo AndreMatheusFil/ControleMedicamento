@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:controlemedicamento/services/ocr_service.dart';
 import 'package:controlemedicamento/helpers/horarios_universal.dart';
 import 'package:controlemedicamento/helpers/horarios_web.dart' as web;
-import 'dart:io';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
+import 'package:image_picker/image_picker.dart';
 
 class AIPage extends StatefulWidget {
   @override
@@ -16,56 +18,51 @@ class _AIPageState extends State<AIPage> {
   bool _isProcessing = false;
   String _extractedText = '';
   List<MedicamentoExtraido> _medicamentosExtraidos = [];
-  File? _selectedImage;
+  XFile? _selectedImage;
+  Uint8List? _imageBytes;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text("IA - Assistente"),
-        backgroundColor: Colors.blue,
-        titleTextStyle: TextStyle(
-          fontSize: 25.0,
-          fontWeight: FontWeight.bold,
-          color: Colors.white,
-        ),
-        centerTitle: true,
-        toolbarHeight: 75.0,
+        title: Text('IA - OCR de Receitas'),
+        backgroundColor: Colors.blue[600],
+        foregroundColor: Colors.white,
       ),
       body: SingleChildScrollView(
-        padding: EdgeInsets.all(16.0),
+        padding: EdgeInsets.all(16),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Header
+            // Header com instruções
             Card(
+              elevation: 4,
               child: Padding(
-                padding: EdgeInsets.all(16.0),
+                padding: EdgeInsets.all(16),
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(
-                      Icons.psychology,
-                      size: 60,
-                      color: Colors.blue,
+                    Row(
+                      children: [
+                        Icon(Icons.auto_awesome, color: Colors.blue[600], size: 28),
+                        SizedBox(width: 12),
+                        Text(
+                          'Scanner de Receitas',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.blue[600],
+                          ),
+                        ),
+                      ],
                     ),
-                    SizedBox(height: 10),
+                    SizedBox(height: 12),
                     Text(
-                      "Assistente IA - OCR de Receitas",
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.blue,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    SizedBox(height: 10),
-                    Text(
-                      "Tire uma foto da sua receita médica e cadastre os medicamentos automaticamente",
+                      'Capture ou selecione uma foto da receita médica para extrair automaticamente os medicamentos e horários.',
                       style: TextStyle(
                         fontSize: 14,
                         color: Colors.grey[600],
                       ),
-                      textAlign: TextAlign.center,
                     ),
                   ],
                 ),
@@ -81,24 +78,24 @@ class _AIPageState extends State<AIPage> {
                   child: ElevatedButton.icon(
                     onPressed: _isProcessing ? null : _captureFromCamera,
                     icon: Icon(Icons.camera_alt),
-                    label: Text("Câmera"),
+                    label: Text('Câmera'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blue,
+                      backgroundColor: Colors.blue[600],
                       foregroundColor: Colors.white,
-                      padding: EdgeInsets.symmetric(vertical: 15),
+                      padding: EdgeInsets.symmetric(vertical: 12),
                     ),
                   ),
                 ),
-                SizedBox(width: 10),
+                SizedBox(width: 12),
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: _isProcessing ? null : _pickFromGallery,
                     icon: Icon(Icons.photo_library),
-                    label: Text("Galeria"),
+                    label: Text('Galeria'),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
+                      backgroundColor: Colors.green[600],
                       foregroundColor: Colors.white,
-                      padding: EdgeInsets.symmetric(vertical: 15),
+                      padding: EdgeInsets.symmetric(vertical: 12),
                     ),
                   ),
                 ),
@@ -107,22 +104,23 @@ class _AIPageState extends State<AIPage> {
             
             SizedBox(height: 20),
             
-            // Imagem selecionada
-            if (_selectedImage != null) ...[
+            // Preview da imagem
+            if (_selectedImage != null || _imageBytes != null) ...[
               Card(
+                elevation: 4,
                 child: Padding(
-                  padding: EdgeInsets.all(16.0),
+                  padding: EdgeInsets.all(16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        "Imagem Selecionada:",
+                        'Imagem Selecionada',
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      SizedBox(height: 10),
+                      SizedBox(height: 12),
                       Container(
                         width: double.infinity,
                         height: 200,
@@ -132,9 +130,19 @@ class _AIPageState extends State<AIPage> {
                         ),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(8),
-                          child: Image.file(
-                            _selectedImage!,
+                          child: Image.memory(
+                            _imageBytes!,
                             fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) {
+                              return Container(
+                                color: Colors.grey[300],
+                                child: Icon(
+                                  Icons.error,
+                                  color: Colors.red,
+                                  size: 50,
+                                ),
+                              );
+                            },
                           ),
                         ),
                       ),
@@ -154,21 +162,23 @@ class _AIPageState extends State<AIPage> {
                                     ),
                                   )
                                 : Icon(Icons.auto_awesome),
-                              label: Text(_isProcessing ? "Processando..." : "Processar OCR"),
+                              label: Text(_isProcessing ? 'Processando...' : 'Extrair Texto'),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.orange,
+                                backgroundColor: Colors.purple[600],
                                 foregroundColor: Colors.white,
+                                padding: EdgeInsets.symmetric(vertical: 12),
                               ),
                             ),
                           ),
-                          SizedBox(width: 10),
+                          SizedBox(width: 12),
                           ElevatedButton.icon(
                             onPressed: _clearImage,
                             icon: Icon(Icons.clear),
-                            label: Text("Limpar"),
+                            label: Text('Limpar'),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.red,
+                              backgroundColor: Colors.red[600],
                               foregroundColor: Colors.white,
+                              padding: EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                             ),
                           ),
                         ],
@@ -177,25 +187,27 @@ class _AIPageState extends State<AIPage> {
                   ),
                 ),
               ),
+              
+              SizedBox(height: 20),
             ],
             
             // Texto extraído
             if (_extractedText.isNotEmpty) ...[
-              SizedBox(height: 20),
               Card(
+                elevation: 4,
                 child: Padding(
-                  padding: EdgeInsets.all(16.0),
+                  padding: EdgeInsets.all(16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        "Texto Extraído:",
+                        'Texto Extraído',
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      SizedBox(height: 10),
+                      SizedBox(height: 12),
                       Container(
                         width: double.infinity,
                         padding: EdgeInsets.all(12),
@@ -216,14 +228,16 @@ class _AIPageState extends State<AIPage> {
                   ),
                 ),
               ),
+              
+              SizedBox(height: 20),
             ],
             
-            // Medicamentos extraídos
+            // Medicamentos identificados
             if (_medicamentosExtraidos.isNotEmpty) ...[
-              SizedBox(height: 20),
               Card(
+                elevation: 4,
                 child: Padding(
-                  padding: EdgeInsets.all(16.0),
+                  padding: EdgeInsets.all(16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -231,7 +245,7 @@ class _AIPageState extends State<AIPage> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            "Medicamentos Identificados:",
+                            'Medicamentos Identificados',
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
@@ -240,62 +254,64 @@ class _AIPageState extends State<AIPage> {
                           ElevatedButton.icon(
                             onPressed: _saveAllMedicamentos,
                             icon: Icon(Icons.save),
-                            label: Text("Salvar Todos"),
+                            label: Text('Salvar Todos'),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green,
+                              backgroundColor: Colors.green[600],
                               foregroundColor: Colors.white,
+                              padding: EdgeInsets.symmetric(vertical: 8, horizontal: 12),
                             ),
                           ),
                         ],
                       ),
-                      SizedBox(height: 10),
-                      ..._medicamentosExtraidos.asMap().entries.map((entry) {
+                      SizedBox(height: 12),
+                      ...(_medicamentosExtraidos.asMap().entries.map((entry) {
                         int index = entry.key;
                         MedicamentoExtraido medicamento = entry.value;
-                        return _buildMedicamentoCard(medicamento, index);
-                      }).toList(),
+                        return Card(
+                          margin: EdgeInsets.only(bottom: 8),
+                          child: ListTile(
+                            leading: CircleAvatar(
+                              backgroundColor: Colors.blue[100],
+                              child: Icon(Icons.medication, color: Colors.blue[600]),
+                            ),
+                            title: Text(
+                              medicamento.nome,
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (medicamento.dosagem.isNotEmpty)
+                                  Text('Dosagem: ${medicamento.dosagem}'),
+                                if (medicamento.frequencia.isNotEmpty)
+                                  Text('Frequência: ${medicamento.frequencia}'),
+                                if (medicamento.duracao.isNotEmpty)
+                                  Text('Duração: ${medicamento.duracao}'),
+                              ],
+                            ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  onPressed: () => _saveMedicamento(medicamento),
+                                  icon: Icon(Icons.save, color: Colors.green[600]),
+                                  tooltip: 'Salvar',
+                                ),
+                                IconButton(
+                                  onPressed: () => _removeMedicamento(index),
+                                  icon: Icon(Icons.delete, color: Colors.red[600]),
+                                  tooltip: 'Remover',
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      }).toList()),
                     ],
                   ),
                 ),
               ),
             ],
-            
-            // Instruções
-            SizedBox(height: 20),
-            Card(
-              child: Padding(
-                padding: EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      "Como usar:",
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    SizedBox(height: 10),
-                    _buildInstructionItem(
-                      "1. Tire uma foto clara da receita médica",
-                      Icons.camera_alt,
-                    ),
-                    _buildInstructionItem(
-                      "2. Aguarde o processamento do OCR",
-                      Icons.auto_awesome,
-                    ),
-                    _buildInstructionItem(
-                      "3. Revise os medicamentos identificados",
-                      Icons.medication,
-                    ),
-                    _buildInstructionItem(
-                      "4. Salve os medicamentos no seu controle",
-                      Icons.save,
-                    ),
-                  ],
-                ),
-              ),
-            ),
           ],
         ),
       ),
@@ -307,8 +323,12 @@ class _AIPageState extends State<AIPage> {
     try {
       final image = await _ocrService.captureImageFromCamera();
       if (image != null) {
+        // Sempre converter para bytes para compatibilidade
+        final bytes = await image.readAsBytes();
+        
         setState(() {
           _selectedImage = image;
+          _imageBytes = bytes;
           _extractedText = '';
           _medicamentosExtraidos = [];
         });
@@ -322,8 +342,12 @@ class _AIPageState extends State<AIPage> {
     try {
       final image = await _ocrService.pickImageFromGallery();
       if (image != null) {
+        // Sempre converter para bytes para compatibilidade
+        final bytes = await image.readAsBytes();
+        
         setState(() {
           _selectedImage = image;
+          _imageBytes = bytes;
           _extractedText = '';
           _medicamentosExtraidos = [];
         });
@@ -335,15 +359,15 @@ class _AIPageState extends State<AIPage> {
 
   // Processar imagem com OCR
   Future<void> _processImage() async {
-    if (_selectedImage == null) return;
+    if (_imageBytes == null) return;
 
     setState(() {
       _isProcessing = true;
     });
 
     try {
-      // Extrair texto da imagem
-      String extractedText = await _ocrService.extractTextFromImage(_selectedImage!);
+      // Sempre usar bytes para compatibilidade
+      String extractedText = await _ocrService.extractTextFromImageBytes(_imageBytes!);
       
       // Processar receita e extrair medicamentos
       List<MedicamentoExtraido> medicamentos = _ocrService.processarReceita(extractedText);
@@ -372,6 +396,7 @@ class _AIPageState extends State<AIPage> {
   void _clearImage() {
     setState(() {
       _selectedImage = null;
+      _imageBytes = null;
       _extractedText = '';
       _medicamentosExtraidos = [];
     });
@@ -379,25 +404,23 @@ class _AIPageState extends State<AIPage> {
 
   // Salvar todos os medicamentos
   Future<void> _saveAllMedicamentos() async {
-    if (_medicamentosExtraidos.isEmpty) return;
-
     try {
       int savedCount = 0;
       
       for (MedicamentoExtraido medicamento in _medicamentosExtraidos) {
-        Map<String, dynamic> horarioMap = medicamento.toHorariosMap();
-        web.Horarios horario = web.Horarios.fromMap(horarioMap);
-        await _helper.saveHorario(horario);
+        await _saveMedicamento(medicamento);
         savedCount++;
       }
-
+      
       _showSuccessDialog(
-        'Medicamentos salvos!',
-        '$savedCount medicamento(s) foram cadastrados com sucesso.'
+        'Medicamentos Salvos',
+        '$savedCount medicamento(s) foram salvos com sucesso!'
       );
-
-      // Limpar após salvar
-      _clearImage();
+      
+      // Remover medicamentos salvos da lista
+      setState(() {
+        _medicamentosExtraidos.clear();
+      });
     } catch (e) {
       _showErrorDialog('Erro ao salvar medicamentos: $e');
     }
@@ -406,13 +429,28 @@ class _AIPageState extends State<AIPage> {
   // Salvar medicamento individual
   Future<void> _saveMedicamento(MedicamentoExtraido medicamento) async {
     try {
-      Map<String, dynamic> horarioMap = medicamento.toHorariosMap();
-      web.Horarios horario = web.Horarios.fromMap(horarioMap);
+      // Criar horário baseado no medicamento extraído
+      web.Horarios horario = web.Horarios();
+      horario.nome = '${medicamento.nome} - ${medicamento.dosagem}';
+      horario.observacoes = 'Frequência: ${medicamento.frequencia}\nDuração: ${medicamento.duracao}';
+      horario.dataInicio = DateTime.now().toIso8601String().split('T')[0];
+      horario.diasFim = 30; // Padrão de 30 dias
+      horario.horaInicio = 8; // Horário padrão
+      horario.minutoInicio = 0;
+      horario.frequencia = 8; // A cada 8 horas
+      horario.segunda = 1;
+      horario.terca = 1;
+      horario.quarta = 1;
+      horario.quinta = 1;
+      horario.sexta = 1;
+      horario.sabado = 1;
+      horario.domingo = 1;
+      
       await _helper.saveHorario(horario);
       
       _showSuccessDialog(
-        'Medicamento salvo!',
-        '${medicamento.nome} foi cadastrado com sucesso.'
+        'Medicamento Salvo',
+        '${medicamento.nome} foi salvo com sucesso!'
       );
     } catch (e) {
       _showErrorDialog('Erro ao salvar medicamento: $e');
@@ -426,133 +464,16 @@ class _AIPageState extends State<AIPage> {
     });
   }
 
-  // Widget para card de medicamento
-  Widget _buildMedicamentoCard(MedicamentoExtraido medicamento, int index) {
-    return Card(
-      margin: EdgeInsets.only(bottom: 8.0),
-      child: Padding(
-        padding: EdgeInsets.all(12.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        medicamento.nome,
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      SizedBox(height: 4),
-                      Text(
-                        'Dosagem: ${medicamento.dosagem}',
-                        style: TextStyle(fontSize: 14),
-                      ),
-                      Text(
-                        'Frequência: ${medicamento.frequencia}',
-                        style: TextStyle(fontSize: 14),
-                      ),
-                      Text(
-                        'Duração: ${medicamento.duracao}',
-                        style: TextStyle(fontSize: 14),
-                      ),
-                      if (medicamento.observacoes.isNotEmpty) ...[
-                        SizedBox(height: 4),
-                        Text(
-                          'Observações: ${medicamento.observacoes}',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontStyle: FontStyle.italic,
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                Column(
-                  children: [
-                    // Indicador de confiança
-                    Container(
-                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: medicamento.confianca > 0.7 
-                          ? Colors.green 
-                          : medicamento.confianca > 0.4 
-                            ? Colors.orange 
-                            : Colors.red,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        '${(medicamento.confianca * 100).toInt()}%',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    SizedBox(height: 8),
-                    // Botões de ação
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          onPressed: () => _saveMedicamento(medicamento),
-                          icon: Icon(Icons.save, color: Colors.green),
-                          tooltip: 'Salvar medicamento',
-                        ),
-                        IconButton(
-                          onPressed: () => _removeMedicamento(index),
-                          icon: Icon(Icons.delete, color: Colors.red),
-                          tooltip: 'Remover da lista',
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // Widget para item de instrução
-  Widget _buildInstructionItem(String text, IconData icon) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: 8.0),
-      child: Row(
-        children: [
-          Icon(icon, color: Colors.blue, size: 20),
-          SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              text,
-              style: TextStyle(fontSize: 14),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   // Diálogos
-  void _showErrorDialog(String title, [String? message]) {
+  void _showErrorDialog(String message) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(title),
-        content: Text(message ?? 'Ocorreu um erro inesperado.'),
+        title: Text('Erro'),
+        content: Text(message),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.of(context).pop(),
             child: Text('OK'),
           ),
         ],
@@ -568,7 +489,7 @@ class _AIPageState extends State<AIPage> {
         content: Text(message),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.of(context).pop(),
             child: Text('OK'),
           ),
         ],
@@ -584,19 +505,11 @@ class _AIPageState extends State<AIPage> {
         content: Text(message),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.of(context).pop(),
             child: Text('OK'),
           ),
         ],
       ),
     );
   }
-
-  @override
-  void dispose() {
-    _ocrService.dispose();
-    super.dispose();
-  }
 }
-
-

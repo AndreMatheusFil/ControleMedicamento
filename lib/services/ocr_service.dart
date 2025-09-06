@@ -1,8 +1,12 @@
 import 'dart:io';
+import 'dart:typed_data';
+import 'dart:convert';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'permission_service.dart';
+import 'google_vision_ocr_service.dart';
 
 class OCRService {
   static final OCRService _instance = OCRService._internal();
@@ -14,12 +18,14 @@ class OCRService {
   final PermissionService _permissionService = PermissionService();
 
   /// Captura uma imagem da câmera
-  Future<File?> captureImageFromCamera() async {
+  Future<XFile?> captureImageFromCamera() async {
     try {
-      // Verifica permissão da câmera
-      bool hasPermission = await _permissionService.requestCameraPermission();
-      if (!hasPermission) {
-        throw Exception('Permissão de câmera negada');
+      // No web, não verifica permissões (gerenciadas pelo navegador)
+      if (!kIsWeb) {
+        bool hasPermission = await _permissionService.requestCameraPermission();
+        if (!hasPermission) {
+          throw Exception('Permissão de câmera negada');
+        }
       }
 
       final XFile? image = await _imagePicker.pickImage(
@@ -29,10 +35,7 @@ class OCRService {
         maxHeight: 1080,
       );
       
-      if (image != null) {
-        return File(image.path);
-      }
-      return null;
+      return image;
     } catch (e) {
       debugPrint('Erro ao capturar imagem: $e');
       return null;
@@ -40,12 +43,14 @@ class OCRService {
   }
 
   /// Seleciona uma imagem da galeria
-  Future<File?> pickImageFromGallery() async {
+  Future<XFile?> pickImageFromGallery() async {
     try {
-      // Verifica permissão de armazenamento
-      bool hasPermission = await _permissionService.requestStoragePermission();
-      if (!hasPermission) {
-        throw Exception('Permissão de armazenamento negada');
+      // No web, não verifica permissões (gerenciadas pelo navegador)
+      if (!kIsWeb) {
+        bool hasPermission = await _permissionService.requestStoragePermission();
+        if (!hasPermission) {
+          throw Exception('Permissão de armazenamento negada');
+        }
       }
 
       final XFile? image = await _imagePicker.pickImage(
@@ -55,10 +60,7 @@ class OCRService {
         maxHeight: 1080,
       );
       
-      if (image != null) {
-        return File(image.path);
-      }
-      return null;
+      return image;
     } catch (e) {
       debugPrint('Erro ao selecionar imagem: $e');
       return null;
@@ -78,25 +80,105 @@ class OCRService {
     }
   }
 
+  /// Processa uma imagem a partir de XFile
+  Future<String> extractTextFromXFile(XFile imageFile) async {
+    try {
+      final inputImage = InputImage.fromFilePath(imageFile.path);
+      final recognizedText = await _textRecognizer.processImage(inputImage);
+      
+      return recognizedText.text;
+    } catch (e) {
+      debugPrint('Erro ao processar OCR com XFile: $e');
+      return '';
+    }
+  }
+
+  /// Processa uma imagem a partir de bytes (para web)
+  Future<String> extractTextFromImageBytes(Uint8List imageBytes) async {
+    try {
+      if (kIsWeb) {
+        // Para web, usar Free OCR API
+        debugPrint('Usando Free OCR API para OCR web');
+        String result = await OCRSpaceService.extractTextFromImageBytes(imageBytes);
+        debugPrint('Texto extraído pelo Free OCR: ${result.length > 100 ? result.substring(0, 100) + "..." : result}');
+        return result;
+      } else {
+        // Para mobile, usar ML Kit
+        final inputImage = InputImage.fromBytes(
+          bytes: imageBytes,
+          metadata: InputImageMetadata(
+            size: Size(1920, 1080),
+            rotation: InputImageRotation.rotation0deg,
+            format: InputImageFormat.bgra8888,
+            bytesPerRow: 1920 * 4,
+          ),
+        );
+        
+        final recognizedText = await _textRecognizer.processImage(inputImage);
+        debugPrint('Texto extraído pelo ML Kit: ${recognizedText.text}');
+        return recognizedText.text;
+      }
+    } catch (e) {
+      debugPrint('Erro ao processar OCR com bytes: $e');
+      return '';
+    }
+  }
+
+
+  /// Converte bytes para base64
+  String _bytesToBase64(Uint8List bytes) {
+    return base64Encode(bytes);
+  }
+
   /// Processa o texto extraído e identifica medicamentos
   List<MedicamentoExtraido> processarReceita(String texto) {
     List<MedicamentoExtraido> medicamentos = [];
     
-    // Divide o texto em linhas
-    List<String> linhas = texto.split('\n');
+    debugPrint('Processando receita: $texto');
     
-    for (String linha in linhas) {
-      linha = linha.trim();
+    // Limpa e normaliza o texto
+    String textoLimpo = _limparTexto(texto);
+    
+    // Divide o texto em linhas
+    List<String> linhas = textoLimpo.split('\n');
+    
+    // Processa cada linha
+    for (int i = 0; i < linhas.length; i++) {
+      String linha = linhas[i].trim();
       if (linha.isEmpty) continue;
       
-      // Padrões comuns em receitas médicas
+      // Tenta extrair medicamento da linha atual
       MedicamentoExtraido? medicamento = _extrairMedicamento(linha);
+      
+      // Se não encontrou, tenta combinar com a próxima linha
+      if (medicamento == null && i < linhas.length - 1) {
+        String linhaCombinada = '$linha ${linhas[i + 1].trim()}';
+        medicamento = _extrairMedicamento(linhaCombinada);
+        if (medicamento != null) i++; // Pula a próxima linha se usou
+      }
+      
       if (medicamento != null) {
         medicamentos.add(medicamento);
       }
     }
     
+    debugPrint('Medicamentos encontrados: ${medicamentos.length}');
     return medicamentos;
+  }
+
+  /// Limpa e normaliza o texto extraído
+  String _limparTexto(String texto) {
+    // Remove caracteres especiais desnecessários
+    String limpo = texto.replaceAll(RegExp(r'[^\w\s\d\-\.\/\(\)]'), ' ');
+    
+    // Remove espaços múltiplos
+    limpo = limpo.replaceAll(RegExp(r'\s+'), ' ');
+    
+    // Remove linhas muito curtas (provavelmente ruído)
+    List<String> linhas = limpo.split('\n');
+    linhas = linhas.where((linha) => linha.trim().length > 3).toList();
+    
+    return linhas.join('\n');
   }
 
   /// Extrai informações de um medicamento de uma linha de texto
@@ -115,10 +197,10 @@ class OCRService {
     String? duracao = _extrairDuracao(linha);
     
     // Se encontrou pelo menos dosagem ou frequência, considera um medicamento
-    if (dosagem != null || frequencia != null) {
+    if (dosagem != null || frequencia != null || _contemPadraoMedicamento(linha)) {
       String nome = _extrairNomeMedicamento(palavras);
       
-      if (nome.isNotEmpty) {
+      if (nome.isNotEmpty && nome.length > 2) {
         return MedicamentoExtraido(
           nome: nome,
           dosagem: dosagem ?? 'Não especificada',
@@ -133,10 +215,32 @@ class OCRService {
     return null;
   }
 
+  /// Verifica se a linha contém padrões típicos de medicamentos
+  bool _contemPadraoMedicamento(String linha) {
+    String linhaLower = linha.toLowerCase();
+    
+    // Padrões comuns em receitas
+    List<String> padroes = [
+      'mg', 'ml', 'mcg', 'ui', 'cp', 'comprimido', 'comprimidos',
+      'cápsula', 'cápsulas', 'gotas', 'xarope', 'pomada',
+      'tomar', 'usar', 'aplicar', 'ingerir', 'administrar',
+      'ao dia', 'vezes', 'horas', 'dias', 'semanas', 'meses'
+    ];
+    
+    int contador = 0;
+    for (String padrao in padroes) {
+      if (linhaLower.contains(padrao)) {
+        contador++;
+      }
+    }
+    
+    return contador >= 2; // Pelo menos 2 padrões encontrados
+  }
+
   /// Extrai a dosagem do medicamento
   String? _extrairDosagem(String linha) {
     // Padrões comuns de dosagem
-    RegExp dosagemRegex = RegExp(r'(\d+(?:\.\d+)?)\s*(mg|g|ml|mcg|UI|cp|comprimido|comprimidos)', caseSensitive: false);
+    RegExp dosagemRegex = RegExp(r'(\d+(?:\.\d+)?)\s*(mg|g|ml|mcg|UI|cp|comprimido|comprimidos|cápsula|cápsulas)', caseSensitive: false);
     Match? match = dosagemRegex.firstMatch(linha);
     
     if (match != null) {
@@ -148,18 +252,20 @@ class OCRService {
 
   /// Extrai a frequência de uso
   String? _extrairFrequencia(String linha) {
+    String linhaLower = linha.toLowerCase();
+    
     // Padrões de frequência
-    if (linha.toLowerCase().contains('1x ao dia') || linha.toLowerCase().contains('1 vez ao dia')) {
+    if (linhaLower.contains('1x ao dia') || linhaLower.contains('1 vez ao dia') || linhaLower.contains('ao dia')) {
       return '1x ao dia';
-    } else if (linha.toLowerCase().contains('2x ao dia') || linha.toLowerCase().contains('2 vezes ao dia')) {
+    } else if (linhaLower.contains('2x ao dia') || linhaLower.contains('2 vezes ao dia')) {
       return '2x ao dia';
-    } else if (linha.toLowerCase().contains('3x ao dia') || linha.toLowerCase().contains('3 vezes ao dia')) {
+    } else if (linhaLower.contains('3x ao dia') || linhaLower.contains('3 vezes ao dia')) {
       return '3x ao dia';
-    } else if (linha.toLowerCase().contains('de 8/8 horas') || linha.toLowerCase().contains('a cada 8 horas')) {
+    } else if (linhaLower.contains('de 8/8 horas') || linhaLower.contains('a cada 8 horas') || linhaLower.contains('8 horas')) {
       return 'A cada 8 horas';
-    } else if (linha.toLowerCase().contains('de 12/12 horas') || linha.toLowerCase().contains('a cada 12 horas')) {
+    } else if (linhaLower.contains('de 12/12 horas') || linhaLower.contains('a cada 12 horas') || linhaLower.contains('12 horas')) {
       return 'A cada 12 horas';
-    } else if (linha.toLowerCase().contains('de 6/6 horas') || linha.toLowerCase().contains('a cada 6 horas')) {
+    } else if (linhaLower.contains('de 6/6 horas') || linhaLower.contains('a cada 6 horas') || linhaLower.contains('6 horas')) {
       return 'A cada 6 horas';
     }
     
