@@ -202,30 +202,196 @@ class OCRService {
   List<MedicamentoInfo> _identificarBlocosMedicamentos(ReceitaContext context) {
     List<MedicamentoInfo> medicamentos = [];
     
-    // Analisa o texto completo para identificar medicamentos
+    // Primeiro, tenta identificar medicamentos por blocos maiores (múltiplas linhas)
+    List<MedicamentoInfo> medicamentosPorBloco = _extrairMedicamentosPorBloco(context);
+    medicamentos.addAll(medicamentosPorBloco);
     
-    // Procura por linhas que começam com # (comum em receitas)
-    List<String> linhasComMedicamentos = context.linhas.where((linha) => 
-      linha.trim().startsWith('#') || 
-      _contemInformacoesMedicamento(linha)
-    ).toList();
-    
-    // Se não encontrou linhas com #, procura por padrões de medicamento
-    if (linhasComMedicamentos.isEmpty) {
-      linhasComMedicamentos = context.linhas.where((linha) => 
+    // Se não encontrou medicamentos por bloco, tenta por linha individual
+    if (medicamentos.isEmpty) {
+      List<String> linhasComMedicamentos = context.linhas.where((linha) => 
+        linha.trim().startsWith('#') || 
         _contemInformacoesMedicamento(linha)
       ).toList();
-    }
-    
-    // Processa cada linha identificada
-    for (String linha in linhasComMedicamentos) {
-      MedicamentoInfo? medicamento = _extrairMedicamentoInteligente(linha, context, 0);
-      if (medicamento != null && medicamento.nome.isNotEmpty) {
-        medicamentos.add(medicamento);
+      
+      // Se não encontrou linhas com #, procura por padrões de medicamento
+      if (linhasComMedicamentos.isEmpty) {
+        linhasComMedicamentos = context.linhas.where((linha) => 
+          _contemInformacoesMedicamento(linha)
+        ).toList();
+      }
+      
+      // Processa cada linha identificada
+      for (String linha in linhasComMedicamentos) {
+        MedicamentoInfo? medicamento = _extrairMedicamentoInteligente(linha, context, 0);
+        if (medicamento != null && medicamento.nome.isNotEmpty) {
+          medicamentos.add(medicamento);
+        }
       }
     }
     
     return medicamentos;
+  }
+
+  // Extrai medicamentos analisando blocos maiores de texto
+  List<MedicamentoInfo> _extrairMedicamentosPorBloco(ReceitaContext context) {
+    List<MedicamentoInfo> medicamentos = [];
+    
+    // Primeiro, procura por medicamentos combinados (ex: LEVONORGESTREL + ETINILESTRADIOL)
+    List<MedicamentoInfo> medicamentosCombinados = _extrairMedicamentosCombinados(context);
+    medicamentos.addAll(medicamentosCombinados);
+    
+    // Se já encontrou medicamentos combinados, não precisa procurar mais
+    if (medicamentos.isNotEmpty) {
+      return medicamentos;
+    }
+    
+    // Procura por padrões genéricos de medicamentos em todo o texto
+    List<MedicamentoInfo> medicamentosGenericos = _extrairMedicamentosGenericos(context);
+    medicamentos.addAll(medicamentosGenericos);
+    
+    // Remove duplicatas
+    medicamentos = medicamentos.fold<List<MedicamentoInfo>>([], (lista, med) {
+      if (!lista.any((m) => m.nome == med.nome)) {
+        lista.add(med);
+      }
+      return lista;
+    });
+    
+    return medicamentos;
+  }
+  
+  // Extrai medicamentos de forma genérica baseado em padrões
+  List<MedicamentoInfo> _extrairMedicamentosGenericos(ReceitaContext context) {
+    List<MedicamentoInfo> medicamentos = [];
+    
+    // Procura por padrões de medicamento + dosagem em todo o texto
+    RegExp regexMedicamentoDosagem = RegExp(
+      r'([A-Z][A-Za-z]{3,})\s+(\d+(?:,\d+)?)\s*(mg|g|ml|mcg|UI)',
+      caseSensitive: false
+    );
+    
+    Iterable<Match> matches = regexMedicamentoDosagem.allMatches(context.textoOriginal);
+    
+    for (Match match in matches) {
+      String nomeMedicamento = match.group(1)?.toUpperCase() ?? '';
+      String dosagem = match.group(2)?.replaceAll(',', '.') ?? '';
+      String unidade = match.group(3)?.toLowerCase() ?? 'mg';
+      
+      // Verifica se não é uma palavra comum que não é medicamento
+      if (_ehMedicamentoValido(nomeMedicamento)) {
+        // Extrai contexto ao redor do medicamento
+        int indice = match.start;
+        String contexto = _extrairContextoMedicamento(context.textoOriginal, indice, nomeMedicamento);
+        
+        // Extrai frequência e duração do contexto
+        String? frequencia = _extrairFrequenciaInteligente(contexto);
+        String? duracao = _extrairDuracaoInteligente(contexto);
+        
+        medicamentos.add(MedicamentoInfo(
+          nome: nomeMedicamento,
+          dosagem: '$dosagem $unidade',
+          frequencia: frequencia ?? 'Conforme orientação médica',
+          duracao: duracao ?? '30 dias',
+          instrucoes: contexto,
+          confianca: 0.8, // Alta confiança para medicamentos com dosagem
+        ));
+      }
+    }
+    
+    return medicamentos;
+  }
+  
+  // Verifica se uma palavra é um medicamento válido
+  bool _ehMedicamentoValido(String palavra) {
+    // Lista de palavras que definitivamente NÃO são medicamentos
+    List<String> palavrasNaoMedicamentos = [
+      'TOMAR', 'USAR', 'APLICAR', 'INGERIR', 'ADMINISTRAR',
+      'COM', 'SEM', 'ALIMENTO', 'AGUA', 'LEITE',
+      'ANTES', 'DEPOIS', 'DURANTE', 'APOS', 'POS',
+      'NOME', 'UPA', 'ATENDIMENTO', 'RECEITUARIO', 'SANTOS',
+      'UNIDADE', 'PRONTO', 'ATENDIMENTO', 'ZONA', 'LESTE',
+      'RECEITUARIO', 'CONTROLE', 'ESPECIAL', 'VIA', 'RETENCAO',
+      'FARMACIA', 'DROGA', 'ORIENTACAO', 'PACIENTE', 'IDENTIFICACAO',
+      'EMITENTE', 'MEDICA', 'CRM', 'COMPRADOR', 'FORNECEDOR',
+      'DIAS', 'HORAS', 'SEMANA', 'MES', 'POR', 'CASO', 'DOR',
+      'MANHA', 'TARDE', 'NOITE', 'CONTINUO', 'CONTINUA',
+      'NECESSARIO', 'NECESSARIO', 'SOS', 'PRN', 'CX', 'CXS',
+      'CARTELA', 'BLISTER', 'COMPRIMIDO', 'CAPSULA', 'CAPS',
+      'QUANTIDADE', 'QUANTIDADE', 'QUANTIDADE', 'QUANTIDADE',
+      'PREFETURA', 'MUNICIPAL', 'CURITIBA', 'SECRETARIA', 'SAUDE',
+      'SUS', 'USUARIO', 'MAE', 'ENDERECO', 'BAIRRO', 'RESPONSAVEL',
+      'NASCIMENTO', 'IDADE', 'CARTAO', 'NACIONAL', 'MUNICIPIO',
+      'RESIDENCIA', 'TELEFONE', 'INTERNO', 'MEDICAMENTO', 'INSTRUCOES',
+      'PORTE', 'SEGURO', 'CLINICA', 'ATENDIMENTO', 'EMAIL', 'WWW',
+      'BRIGADEIRO', 'FRANCO', 'PARANA', 'CEP', 'PAGINA', 'DATA',
+      'HORA', 'ASSINATURA', 'CARIMBO', 'FARMACEUTICO', 'IDENTIFICACAO',
+      'EMISSOR', 'UF', 'CIDADE', 'FORNECEDOR', 'COMPRADOR'
+    ];
+    
+    return !palavrasNaoMedicamentos.contains(palavra.toUpperCase()) &&
+           palavra.length >= 4 &&
+           !RegExp(r'^\d+$').hasMatch(palavra);
+  }
+  
+  // Extrai medicamentos combinados (ex: LEVONORGESTREL 0,15 MG + ETINILESTRADIOL 0,03 MG)
+  List<MedicamentoInfo> _extrairMedicamentosCombinados(ReceitaContext context) {
+    List<MedicamentoInfo> medicamentos = [];
+    
+    // Padrão para medicamentos combinados
+    RegExp regexCombinado = RegExp(
+      r'(\w+)\s+(\d+(?:,\d+)?)\s*mg\s*\+\s*(\w+)\s+(\d+(?:,\d+)?)\s*mg',
+      caseSensitive: false
+    );
+    
+    Match? match = regexCombinado.firstMatch(context.textoOriginal);
+    if (match != null) {
+      String medicamento1 = match.group(1)?.toUpperCase() ?? '';
+      String dosagem1 = match.group(2)?.replaceAll(',', '.') ?? '';
+      String medicamento2 = match.group(3)?.toUpperCase() ?? '';
+      String dosagem2 = match.group(4)?.replaceAll(',', '.') ?? '';
+      
+      // Extrai frequência e duração do contexto
+      String? frequencia = _extrairFrequenciaInteligente(context.textoOriginal);
+      String? duracao = _extrairDuracaoInteligente(context.textoOriginal);
+      
+      // Cria medicamento combinado
+      medicamentos.add(MedicamentoInfo(
+        nome: '$medicamento1 + $medicamento2',
+        dosagem: '$dosagem1 mg + $dosagem2 mg',
+        frequencia: frequencia ?? 'Conforme orientação médica',
+        duracao: duracao ?? '30 dias',
+        instrucoes: context.textoOriginal,
+        confianca: 0.9, // Alta confiança para medicamentos combinados
+      ));
+    }
+    
+    return medicamentos;
+  }
+  
+  // Extrai contexto ao redor de um medicamento encontrado
+  String _extrairContextoMedicamento(String texto, int indice, String medicamento) {
+    int inicio = (indice - 50).clamp(0, texto.length);
+    int fim = (indice + medicamento.length + 100).clamp(0, texto.length);
+    
+    String contexto = texto.substring(inicio, fim);
+    
+    // Tenta encontrar o final da linha ou próximo medicamento
+    List<String> linhas = contexto.split('\n');
+    if (linhas.length > 1) {
+      // Pega a linha que contém o medicamento e a próxima
+      String linhaComMedicamento = linhas.firstWhere(
+        (linha) => linha.toUpperCase().contains(medicamento),
+        orElse: () => linhas.first
+      );
+      
+      int indiceLinha = linhas.indexOf(linhaComMedicamento);
+      if (indiceLinha >= 0 && indiceLinha + 1 < linhas.length) {
+        return '$linhaComMedicamento ${linhas[indiceLinha + 1]}';
+      }
+      return linhaComMedicamento;
+    }
+    
+    return contexto;
   }
 
   // Verifica se uma linha contém informações de medicamento
@@ -258,7 +424,6 @@ class OCRService {
     if (temFrequencia) indicadores++;
     if (temPalavraMedica) indicadores++;
     
-    // Precisa de pelo menos 2 indicadores para ser considerado medicamento
     return indicadores >= 2;
   }
 
@@ -311,36 +476,57 @@ class OCRService {
       'receituario', 'controle', 'especial', 'via', 'retencao',
       'farmacia', 'droga', 'orientacao', 'paciente', 'identificacao',
       'emitente', 'medica', 'crm', 'comprador', 'fornecedor',
-      'dias', 'horas', 'semana', 'mes', 'por', 'caso', 'dor'
+      'dias', 'horas', 'semana', 'mes', 'por', 'caso', 'dor',
+      'manha', 'tarde', 'noite', 'continuo', 'continua',
+      'necessario', 'necessario', 'sos', 'prn', 'cx', 'cxs',
+      'cartela', 'blister', 'comprimido', 'capsula', 'caps'
     ];
     
-    // Procura pela primeira palavra que parece ser um nome de medicamento
+    // Procura por padrões de medicamento (palavra + dosagem)
+    for (int i = 0; i < palavras.length - 1; i++) {
+      String palavra = palavras[i].trim();
+      String proximaPalavra = palavras[i + 1].trim();
+      
+      // Verifica se é um padrão de medicamento + dosagem
+      if (palavra.length >= 4 && 
+          !palavrasIgnorar.contains(palavra.toLowerCase()) &&
+          !RegExp(r'^\d+$').hasMatch(palavra) &&
+          RegExp(r'^\d+(?:,\d+)?$').hasMatch(proximaPalavra)) {
+        return palavra.toUpperCase();
+      }
+    }
+    
+    // Se não encontrou padrão medicamento + dosagem, procura por palavras válidas
     for (String palavra in palavras) {
       String palavraLimpa = palavra.trim();
       
-      // Deve ter pelo menos 4 caracteres, não ser número, não estar na lista de ignorar
       if (palavraLimpa.length >= 4 && 
           !palavrasIgnorar.contains(palavraLimpa.toLowerCase()) &&
           !RegExp(r'^\d+$').hasMatch(palavraLimpa) &&
           !RegExp(r'^\d+[a-z]*$').hasMatch(palavraLimpa.toLowerCase()) &&
-          !RegExp(r'^[a-z]{1,2}$').hasMatch(palavraLimpa.toLowerCase())) { // Evita abreviações muito curtas
+          !RegExp(r'^[a-z]{1,2}$').hasMatch(palavraLimpa.toLowerCase())) {
         
-        // Se a palavra contém números misturados, pode ser uma dosagem, pula
+        // Ignora palavras que são claramente dosagens
         if (RegExp(r'\d+').hasMatch(palavraLimpa) && palavraLimpa.length < 8) {
           continue;
         }
         
-        return palavraLimpa;
+        // Ignora palavras que são claramente unidades
+        if (RegExp(r'^(mg|g|ml|mcg|ui|cp|cápsula|comprimido)$', caseSensitive: false).hasMatch(palavraLimpa)) {
+          continue;
+        }
+        
+        return palavraLimpa.toUpperCase();
       }
     }
     
-    // Se não encontrou uma palavra adequada, tenta pegar a primeira palavra longa
+    // Fallback: procura por palavras mais longas
     for (String palavra in palavras) {
       String palavraLimpa = palavra.trim();
       if (palavraLimpa.length >= 6 && 
           !RegExp(r'^\d+$').hasMatch(palavraLimpa) &&
           !palavrasIgnorar.contains(palavraLimpa.toLowerCase())) {
-        return palavraLimpa;
+        return palavraLimpa.toUpperCase();
       }
     }
     
@@ -349,23 +535,33 @@ class OCRService {
 
 
   String? _extrairDosagemInteligente(String linha) {
-    // Padrões mais flexíveis para dosagem
     List<RegExp> padroesDosagem = [
-      RegExp(r'(\d+(?:\.\d+)?)\s*(mg|g|ml|mcg|UI|cp|cápsula|comprimido)', caseSensitive: false),
-      RegExp(r'(\d+)\s*m\b', caseSensitive: false), // Para "400m" quando OCR corta "mg"
-      RegExp(r'(\d+)\s*mig\b', caseSensitive: false), // Para "400mig" quando OCR erra "mg"
-      RegExp(r'(\d+)\s*mg\b', caseSensitive: false), // Padrão direto
+      // Padrões com vírgula (ex: 0,15 MG)
+      RegExp(r'(\d+(?:,\d+)?)\s*(mg|g|ml|mcg|UI|cp|cápsula|comprimido)', caseSensitive: false),      RegExp(r'(\d+(?:\.\d+)?)\s*(mg|g|ml|mcg|UI|cp|cápsula|comprimido)', caseSensitive: false),
+      RegExp(r'(\d+)\s*m\b', caseSensitive: false),
+      RegExp(r'(\d+)\s*mig\b', caseSensitive: false),
+      RegExp(r'(\d+)\s*mg\b', caseSensitive: false),
+      RegExp(r'(\d+(?:,\d+)?)\s*mg\s*\+\s*(\w+)\s*(\d+(?:,\d+)?)\s*mg', caseSensitive: false),
     ];
     
     for (RegExp regex in padroesDosagem) {
       Match? match = regex.firstMatch(linha);
-    if (match != null) {
+      if (match != null) {
         String numero = match.group(1) ?? '';
         String unidade = match.group(2) ?? 'mg';
         
-        // Corrige unidades comuns de erro de OCR
+        // Trata vírgula como ponto decimal
+        if (numero.contains(',')) {
+          numero = numero.replaceAll(',', '.');
+        }
+        
         if (unidade == 'm' || unidade == 'mig') {
           unidade = 'mg';
+        }
+        
+        // Se é uma combinação de medicamentos, retorna a primeira dosagem
+        if (match.groupCount >= 3 && match.group(3) != null) {
+          return '$numero $unidade';
         }
         
         return '$numero $unidade';
@@ -385,36 +581,66 @@ class OCRService {
       return 'A cada 8 horas';
     } else if (linhaLower.contains('6/6h') || linhaLower.contains('6/6')) {
       return 'A cada 6 horas';
-    } else if (linhaLower.contains('1 cap') && linhaLower.contains('dia')) {
+    } else if (linhaLower.contains('4/4h') || linhaLower.contains('4/4')) {
+      return 'A cada 4 horas';
+    } 
+    // Padrões de "tomar X comp"
+    else if (linhaLower.contains('tomar 1 comp') || linhaLower.contains('tomar 1 caps')) {
+      if (linhaLower.contains('manha') || linhaLower.contains('dia')) {
+        return '1x ao dia';
+      } else if (linhaLower.contains('12h') || linhaLower.contains('12 horas')) {
+        return 'A cada 12 horas';
+      } else if (linhaLower.contains('8h') || linhaLower.contains('8 horas')) {
+        return 'A cada 8 horas';
+      } else if (linhaLower.contains('6h') || linhaLower.contains('6 horas')) {
+        return 'A cada 6 horas';
+      } else {
+        return '1x ao dia'; // Padrão quando não especificado
+      }
+    }
+    // Padrões de "tomar X caps"
+    else if (linhaLower.contains('tomar 2 comp') || linhaLower.contains('tomar 2 caps')) {
+      return '2x ao dia';
+    } else if (linhaLower.contains('tomar 3 comp') || linhaLower.contains('tomar 3 caps')) {
+      return '3x ao dia';
+    }
+    // Padrões de "se necessário"
+    else if (linhaLower.contains('se necessario') || linhaLower.contains('se necessário') || 
+             linhaLower.contains('sos') || linhaLower.contains('prn')) {
+      return 'Conforme necessário';
+    }
+    // Padrões de "ao dia"
+    else if (linhaLower.contains('1 cap') && linhaLower.contains('dia')) {
       return '1x ao dia';
     } else if (linhaLower.contains('2x ao dia') || linhaLower.contains('2 vezes ao dia')) {
       return '2x ao dia';
     } else if (linhaLower.contains('3x ao dia') || linhaLower.contains('3 vezes ao dia')) {
       return '3x ao dia';
     }
+    // Padrões de "de forma continua"
+    else if (linhaLower.contains('de forma continua') || linhaLower.contains('continuamente')) {
+      return 'Continuamente';
+    }
     
-    // Padrões mais flexíveis para frequência
     List<RegExp> padroesFrequencia = [
-      RegExp(r'(\d+)/(\d+)h?', caseSensitive: false), // 12/12h
-      RegExp(r'(\d+)/(\d+)', caseSensitive: false), // 12/12
-      RegExp(r'(\d+)x\s*ao\s*dia', caseSensitive: false), // 2x ao dia
-      RegExp(r'(\d+)\s*vezes\s*ao\s*dia', caseSensitive: false), // 2 vezes ao dia
+      RegExp(r'(\d+)/(\d+)h?', caseSensitive: false),
+      RegExp(r'(\d+)/(\d+)', caseSensitive: false),
+      RegExp(r'(\d+)x\s*ao\s*dia', caseSensitive: false),
+      RegExp(r'(\d+)\s*vezes\s*ao\s*dia', caseSensitive: false),
     ];
     
     for (RegExp regex in padroesFrequencia) {
       Match? match = regex.firstMatch(linha);
-    if (match != null) {
+      if (match != null) {
         String grupo1 = match.group(1) ?? '';
         String grupo2 = match.group(2) ?? '';
         
-        // Se tem dois grupos (formato X/Y)
         if (grupo2.isNotEmpty) {
           int horas = int.tryParse(grupo2) ?? 0;
           if (horas > 0) {
             return 'A cada $horas horas';
           }
         } else {
-          // Se tem apenas um grupo (formato Xx ao dia)
           int vezes = int.tryParse(grupo1) ?? 0;
           if (vezes > 0) {
             return '${vezes}x ao dia';
@@ -427,6 +653,32 @@ class OCRService {
   }
 
   String? _extrairDuracaoInteligente(String linha) {
+    String linhaLower = linha.toLowerCase();
+    
+    // Padrões específicos para cartelas/blisters
+    if (linhaLower.contains('cartela') || linhaLower.contains('blister')) {
+      RegExp regexCartela = RegExp(r'(\d+)\s*(cartela|blister)', caseSensitive: false);
+      Match? match = regexCartela.firstMatch(linha);
+      if (match != null) {
+        String numero = match.group(1) ?? '';
+        int numCartelas = int.tryParse(numero) ?? 1;
+        // Assumindo que cada cartela tem 28 comprimidos (comum em anticoncepcionais)
+        int dias = numCartelas * 28;
+        return '$dias dias';
+      }
+    }
+    
+    // Padrões específicos para comprimidos
+    if (linhaLower.contains('comprimido') || linhaLower.contains('comp')) {
+      RegExp regexComp = RegExp(r'(\d+)\s*(comprimido|comp)', caseSensitive: false);
+      Match? match = regexComp.firstMatch(linha);
+      if (match != null) {
+        String numero = match.group(1) ?? '';
+        int numComps = int.tryParse(numero) ?? 1;
+        // Assumindo 1 comprimido por dia
+        return '$numComps dias';
+      }
+    }
     
     List<RegExp> padroesDuracao = [
       RegExp(r'por\s+(\d+)\s*(dias?|semanas?|meses?)', caseSensitive: false), 
@@ -466,6 +718,7 @@ class OCRService {
     
     return confianca.clamp(0.0, 1.0);
   }
+
 
 
   void dispose() {
