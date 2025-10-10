@@ -1,5 +1,6 @@
 import 'package:controlemedicamento/helpers/horarios_universal.dart';
 import 'package:controlemedicamento/helpers/horarios_web.dart' as web;
+import 'package:controlemedicamento/services/notification_service.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'cadastro_horarios_page.dart';
@@ -8,7 +9,6 @@ class HomePageCadastroState extends StatefulWidget{
   const HomePageCadastroState({super.key});
 
   @override
-  // ignore: library_private_types_in_public_api
   _HomePageCadastroState createState() => _HomePageCadastroState();
 }
 
@@ -23,6 +23,7 @@ class _HomePageCadastroState extends State<HomePageCadastroState>{
   @override
   void initState(){
     super.initState();
+    NotificationService.instance.initialize();
     // print("Iniciando...");
     // Teste de banco de dados
     // Horarios h = Horarios();
@@ -74,10 +75,8 @@ class _HomePageCadastroState extends State<HomePageCadastroState>{
   }
 
 
-  //Card de cada horário
   Widget _horarioCard(BuildContext context, int index){
   DateTime? inicio;
-    // Converte a string do banco para DateTime
   if (horarios[index].dataInicio != null && horarios[index].dataInicio != "") {
     String rawDate = horarios[index].dataInicio ?? "";
     List<String> parts = rawDate.split("-");
@@ -94,20 +93,17 @@ class _HomePageCadastroState extends State<HomePageCadastroState>{
   DateTime? fim;
   String? dataFimFormatada;
   if (inicio != null) {
-    // Formata em pt-BR
     dataFormatada =
         DateFormat("dd 'de' MMMM 'de' yyyy", "pt_BR").format(inicio);
 
     
     fim = inicio.add(Duration(days: horarios[index].diasFim ?? 0));
-    // Formata em pt-BR
     dataFimFormatada =
       DateFormat("dd 'de' MMMM 'de' yyyy", "pt_BR").format(fim);
   }
 
   
 
-  // Monta o texto completo
   String textoDataInicio =
       "Início: $dataFormatada";
   String textoDataFim =
@@ -248,6 +244,7 @@ class _HomePageCadastroState extends State<HomePageCadastroState>{
       setState(() {
         horarios = List<web.Horarios>.from(list);
       }); 
+      NotificationService.instance.rescheduleAll(horarios);
     });
   }
 }
