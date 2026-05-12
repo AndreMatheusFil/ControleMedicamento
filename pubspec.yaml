@@ -30,6 +30,11 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_local_notifications: ^17.0.0
+  timezone: ^0.9.2
+  image_picker: ^1.1.2
+  google_mlkit_text_recognition: ^0.15.1
+  string_similarity: ^2.1.1
   
   flutter_localizations:
     sdk: flutter
@@ -43,6 +48,7 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  flutter_launcher_icons: ^0.13.1
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
@@ -53,7 +59,13 @@ dev_dependencies:
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
-
+flutter_icons:
+  android: true
+  # ios: true
+  windows:
+    generate: true
+    icon_size: 256
+  image_path: "assets/controle_medicamento.png"
 # The following section is specific to Flutter packages.
 flutter:
 

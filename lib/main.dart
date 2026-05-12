@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 // import 'package:intl/date_symbol_data_local.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'ui/home_page.dart';
+import 'package:controlemedicamento/ui/app_theme.dart';
 
 void main() async {
   
@@ -14,16 +15,7 @@ void main() async {
     ],
     supportedLocales: [const Locale('pt', 'BR')],
     debugShowCheckedModeBanner: false,
-    theme: ThemeData(
-      primarySwatch: Colors.blue,
-      primaryColor: Colors.red,
-      snackBarTheme: SnackBarThemeData(
-        backgroundColor: Colors.red,
-        contentTextStyle: TextStyle(
-          color: Colors.white,
-        ),
-      ),
-    ),
+    theme: AppTheme.theme,
     title: "Controle de Medicamentos",
     home: HomePage()
   ));

@@ -21,6 +21,10 @@ class _CadastroHorarioPageState extends State<CadastroHorarioPage> {
   final _minutoInicioController = TextEditingController();
   final _frequenciaController = TextEditingController();
   final _observacoesController = TextEditingController();
+  final _quantidadeTotalController = TextEditingController();
+  final _quantidadePorDoseController = TextEditingController();
+  final _dosagemController = TextEditingController();
+  final _formaController = TextEditingController();
   @override
   void initState() {
     super.initState();
@@ -50,6 +54,10 @@ class _CadastroHorarioPageState extends State<CadastroHorarioPage> {
         //_dataInicioController.text = DateFormat('dd/MM/yyyy', 'pt_BR').format(DateTime.parse(_editedHorario.dataInicio.toString()));
       } else {
         _dataInicioController.text = "";
+        _quantidadeTotalController.text = _editedHorario.quantidadeTotal?.toString() ?? "";
+        _quantidadePorDoseController.text = _editedHorario.quantidadePorDose?.toString() ?? "";
+        _dosagemController.text = _editedHorario.dosagem ?? "";
+        _formaController.text = _editedHorario.forma ?? "";
       }
       _diasFimController.text = _editedHorario.diasFim?.toString() ?? "";
       _horaInicioController.text = _editedHorario.horaInicio?.toString() ?? "";
@@ -65,7 +73,7 @@ class _CadastroHorarioPageState extends State<CadastroHorarioPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_editedHorario.nome ?? "Novo Horário"),
-        backgroundColor: Colors.blue,
+        backgroundColor: const Color(0xFF6C4AB6),
         iconTheme: IconThemeData(
           color: Colors.white, // Define a cor do ícone como branco
         ), 
@@ -83,7 +91,7 @@ class _CadastroHorarioPageState extends State<CadastroHorarioPage> {
         },
         // ignore: sort_child_properties_last
         child: Icon(Icons.save, color: Colors.white),
-        backgroundColor: Colors.blue,
+        backgroundColor: const Color(0xFF6C4AB6),
       ),
       body: SingleChildScrollView(
         padding: EdgeInsets.all(10.0),
@@ -100,6 +108,55 @@ class _CadastroHorarioPageState extends State<CadastroHorarioPage> {
                 });
               },
               // controller: TextEditingController(text: _editedHorario.nome),
+            ),
+            TextField(
+              controller: _dosagemController,
+              decoration: const InputDecoration(labelText: "Dosagem Ex: 500mg"),
+              onChanged: (text) {
+                setState(() {
+                  _editedHorario.dosagem = text;
+                });
+              },
+            ),
+            TextField(
+              controller: _formaController,
+              decoration: const InputDecoration(labelText: "Forma Ex: comprimidos, gotas, ml"),
+              onChanged: (text) {
+                setState(() {
+                  _editedHorario.forma = text;
+                });
+              },
+            ),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _quantidadeTotalController,
+                    decoration: const InputDecoration(labelText: "Qtd. total"),
+                    keyboardType: TextInputType.number,
+                    onChanged: (text) {
+                      setState(() {
+                        _editedHorario.quantidadeTotal =
+                            text.isNotEmpty ? int.tryParse(text) ?? 0 : 0;
+                      });
+                    },
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: TextField(
+                    controller: _quantidadePorDoseController,
+                    decoration: const InputDecoration(labelText: "Qtd. por dose"),
+                    keyboardType: TextInputType.number,
+                    onChanged: (text) {
+                      setState(() {
+                        _editedHorario.quantidadePorDose =
+                            text.isNotEmpty ? int.tryParse(text) ?? 1 : 1;
+                      });
+                    },
+                  ),
+                ),
+              ],
             ),
             TextField(
               controller: _dataInicioController,

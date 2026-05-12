@@ -49,7 +49,7 @@ class _HomePageCadastroState extends State<HomePageCadastroState>{
       
       appBar: AppBar(
         title: Text("Cadastro de Horários"),
-        backgroundColor: Colors.blue,
+        backgroundColor: const Color(0xFF6C4AB6),
         titleTextStyle: TextStyle(
           fontSize: 25.0,
           fontWeight: FontWeight.bold,
@@ -62,7 +62,7 @@ class _HomePageCadastroState extends State<HomePageCadastroState>{
         onPressed: _showCadastroHorarioPage,
         // ignore: sort_child_properties_last
         child: Icon(Icons.add, color: Colors.white),
-        backgroundColor: Colors.blue,
+        backgroundColor: const Color(0xFF6C4AB6),
       ),
       body: ListView.builder(
         padding: EdgeInsets.all(10.0),
